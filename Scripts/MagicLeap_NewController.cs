@@ -36,7 +36,7 @@ public class MagicLeap_NewController : MonoBehaviour {
     public bool padDirRight = false;
     public bool padDirCenter = false;
 
-    public Vector2 touchpad = new Vector2(0f, 0f);
+    public Vector3 touchpad = new Vector2(0f, 0f);
 
     [HideInInspector] public Vector3 startPos = Vector3.zero;
     [HideInInspector] public Vector3 endPos = Vector3.zero;
@@ -57,29 +57,9 @@ public class MagicLeap_NewController : MonoBehaviour {
     }
 
     private void Update() {
-        UpdateLED();
-
         resetButtons();
-        //checkTriggerVal();
-        checkPadDir();
 
-        /*
-		if (ctl.ControllerInputDevice.GetButtonDown(GvrControllerButton.Grip)) {
-            gripped = true;
-            gripDown = true;
-        } else if (ctl.ControllerInputDevice.GetButtonUp(GvrControllerButton.Grip)) {
-            gripped = false;
-            gripUp = true;
-        }
-
-        if (ctl.ControllerInputDevice.GetButtonDown(GvrControllerButton.App)) {
-            menuPressed = true;
-            menuDown = true;
-        } else if (ctl.ControllerInputDevice.GetButtonUp(GvrControllerButton.App)) {
-            menuPressed = false;
-            menuUp = true;
-        }
-		*/
+        checkInputs();
     }
 
     private void resetButtons() {
@@ -87,6 +67,7 @@ public class MagicLeap_NewController : MonoBehaviour {
         padDown = false;
         gripDown = false;
         menuDown = false;
+
         triggerUp = false;
         padUp = false;
         gripUp = false;
@@ -99,13 +80,42 @@ public class MagicLeap_NewController : MonoBehaviour {
         padDirCenter = true;
     }
 
-    //private void checkTriggerVal() {
-    //triggerVal = device.GetAxis(Valve.VR.EVRButtonId.k_EButton_SteamVR_Trigger).x;
-    //}
+    private void checkInputs() {
+        if (!_controllerConnectionHandler.IsControllerValid()) {
+            return;
+        }
 
-    private void checkPadDir() {
-		/*
-        touchpad = ctl.ControllerInputDevice.TouchPos; //device.GetAxis(Valve.VR.EVRButtonId.k_EButton_Axis0);
+        MLInputController controller = _controllerConnectionHandler.ConnectedController;
+
+        checkPadDir(ref controller);
+        checkTriggerVal(ref controller);
+        checkLeds(ref controller);
+
+        // The ML1 touchpad also recognizes a double press which can serve as a separate button
+        if (controller.Touch2Active) {
+            if (!gripDown) gripDown = true;
+            gripped = true;
+        } else {
+            if (gripped) gripUp = true;
+            gripped = false;
+        }
+    }
+
+    private void checkTriggerVal(ref MLInputController controller) {
+        triggerVal = controller.TriggerValue; //device.GetAxis(Valve.VR.EVRButtonId.k_EButton_SteamVR_Trigger).x;
+    }
+
+    private void checkPadDir(ref MLInputController controller) {
+        // The ML1 touchpad doesn't have a discrete button, so we fake one here
+        touchpad = controller.Touch1PosAndForce; //ctl.ControllerInputDevice.TouchPos; //device.GetAxis(Valve.VR.EVRButtonId.k_EButton_Axis0);
+
+        if (touchpad.z > touchPadLimit) {
+            if (!padDown) padDown = true;
+            padPressed = true;
+        } else {
+            if (padPressed) padUp = true;
+            padPressed = false;
+        }
 
         if (touchpad.y > touchPadLimit) {
             padDirUp = true;
@@ -126,7 +136,6 @@ public class MagicLeap_NewController : MonoBehaviour {
             padDirRight = true;
             padDirCenter = false;
         }
-		*/
     }
 
     /*
@@ -143,12 +152,7 @@ public class MagicLeap_NewController : MonoBehaviour {
     }
     */
 
-    private void UpdateLED() {
-        if (!_controllerConnectionHandler.IsControllerValid()) {
-            return;
-        }
-
-        MLInputController controller = _controllerConnectionHandler.ConnectedController;
+    private void checkLeds(ref MLInputController controller) {
         if (controller.Touch1Active) {
             // Get angle of touchpad position.
             float angle = -Vector2.SignedAngle(Vector2.up, controller.Touch1PosAndForce);
@@ -184,27 +188,25 @@ public class MagicLeap_NewController : MonoBehaviour {
 
     private void HandleOnButtonDown(byte controllerId, MLInputControllerButton button) {
         MLInputController controller = _controllerConnectionHandler.ConnectedController;
-        if (controller != null && controller.Id == controllerId &&
-            button == MLInputControllerButton.Bumper) {
+        if (controller != null && controller.Id == controllerId && button == MLInputControllerButton.Bumper) {
             // Demonstrate haptics using callbacks.
             controller.StartFeedbackPatternVibe(MLInputControllerFeedbackPatternVibe.ForceDown, MLInputControllerFeedbackIntensity.Medium);
             // Toggle UseCFUIDTransforms
             controller.UseCFUIDTransforms = !controller.UseCFUIDTransforms;
 
-            padPressed = true;
-            padDown = true;
+            menuPressed = true;
+            menuDown = true;
         }
     }
 
     private void HandleOnButtonUp(byte controllerId, MLInputControllerButton button) {
         MLInputController controller = _controllerConnectionHandler.ConnectedController;
-        if (controller != null && controller.Id == controllerId &&
-            button == MLInputControllerButton.Bumper) {
+        if (controller != null && controller.Id == controllerId && button == MLInputControllerButton.Bumper) {
             // Demonstrate haptics using callbacks.
             controller.StartFeedbackPatternVibe(MLInputControllerFeedbackPatternVibe.ForceUp, MLInputControllerFeedbackIntensity.Medium);
 
-            padPressed = false;
-            padUp = true;
+            menuPressed = false;
+            menuUp = true;
         }
     }
 
