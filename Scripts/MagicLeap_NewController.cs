@@ -6,6 +6,17 @@ using UnityEngine.XR.MagicLeap;
 [RequireComponent(typeof(ControllerConnectionHandler))]
 public class MagicLeap_NewController : MonoBehaviour {
 
+    private ControllerConnectionHandler _controllerConnectionHandler;
+    private int _lastLEDindex = -1;
+
+    private const float TRIGGER_DOWN_MIN_VALUE = 0.2f;
+    private const float HALF_HOUR_IN_DEGREES = 15.0f;
+    private const float DEGREES_PER_HOUR = 12.0f / 360.0f;
+
+    private const int MIN_LED_INDEX = (int)(MLInputControllerFeedbackPatternLED.Clock12);
+    private const int MAX_LED_INDEX = (int)(MLInputControllerFeedbackPatternLED.Clock6And12);
+    private const int LED_INDEX_DELTA = MAX_LED_INDEX - MIN_LED_INDEX;
+
     public bool triggerPressed = false;
     public bool padPressed = false;
     public bool gripped = false;
@@ -31,39 +42,29 @@ public class MagicLeap_NewController : MonoBehaviour {
     [HideInInspector] public Vector3 endPos = Vector3.zero;
     [HideInInspector] public float triggerVal;
 
-    private ControllerConnectionHandler ctl;
-
     private float touchPadLimit = 0.6f; // 0.7f;
 
     private void Awake() {
-        ctl = GetComponent<ControllerConnectionHandler>();
+        _controllerConnectionHandler = GetComponent<ControllerConnectionHandler>();
+    }
+
+    private void Start() {
+        MLInput.OnControllerButtonUp += HandleOnButtonUp;
+        MLInput.OnControllerButtonDown += HandleOnButtonDown;
+
+        MLInput.OnTriggerDown += HandleOnTriggerDown;
+        MLInput.OnTriggerUp += HandleOnTriggerUp;
     }
 
     private void Update() {
-		/*
+        UpdateLED();
+
         resetButtons();
         //checkTriggerVal();
         checkPadDir();
 
-        if (ctl.ControllerInputDevice.GetButtonDown(GvrControllerButton.Trigger)) {
-            triggerPressed = true;
-            triggerDown = true;
-            startPos = transform.position;
-        } else if (ctl.ControllerInputDevice.GetButtonUp(GvrControllerButton.Trigger)) {
-            triggerPressed = false;
-            triggerUp = true;
-            endPos = transform.position;
-        }
-
-        if (ctl.ControllerInputDevice.GetButtonDown(GvrControllerButton.TouchPadButton)) {
-            padPressed = true;
-            padDown = true;
-        } else if (ctl.ControllerInputDevice.GetButtonUp(GvrControllerButton.TouchPadButton)) {
-            padPressed = false;
-            padUp = true;
-        }
-
-        if (ctl.ControllerInputDevice.GetButtonDown(GvrControllerButton.Grip)) {
+        /*
+		if (ctl.ControllerInputDevice.GetButtonDown(GvrControllerButton.Grip)) {
             gripped = true;
             gripDown = true;
         } else if (ctl.ControllerInputDevice.GetButtonUp(GvrControllerButton.Grip)) {
@@ -141,5 +142,94 @@ public class MagicLeap_NewController : MonoBehaviour {
         device.TriggerHapticPulse((ushort)ms, Valve.VR.EVRButtonId.k_EButton_SteamVR_Touchpad);
     }
     */
+
+    private void UpdateLED() {
+        if (!_controllerConnectionHandler.IsControllerValid()) {
+            return;
+        }
+
+        MLInputController controller = _controllerConnectionHandler.ConnectedController;
+        if (controller.Touch1Active) {
+            // Get angle of touchpad position.
+            float angle = -Vector2.SignedAngle(Vector2.up, controller.Touch1PosAndForce);
+            if (angle < 0.0f) {
+                angle += 360.0f;
+            }
+
+            // Get the correct hour and map it to [0,6]
+            int index = (int)((angle + HALF_HOUR_IN_DEGREES) * DEGREES_PER_HOUR) % LED_INDEX_DELTA;
+
+            // Pass from hour to MLInputControllerFeedbackPatternLED index  [0,6] -> [MAX_LED_INDEX, MIN_LED_INDEX + 1, ..., MAX_LED_INDEX - 1]
+            index = (MAX_LED_INDEX + index > MAX_LED_INDEX) ? MIN_LED_INDEX + index : MAX_LED_INDEX;
+
+            if (_lastLEDindex != index) {
+                // a duration of 0 means leave it on indefinitely
+                controller.StartFeedbackPatternLED((MLInputControllerFeedbackPatternLED)index, MLInputControllerFeedbackColorLED.BrightCosmicPurple, 0);
+                _lastLEDindex = index;
+            }
+        } else if (_lastLEDindex != -1) {
+            controller.StopFeedbackPatternLED();
+            _lastLEDindex = -1;
+        }
+    }
+
+    private void OnDestroy() {
+        if (MLInput.IsStarted) {
+            MLInput.OnTriggerDown -= HandleOnTriggerDown;
+            MLInput.OnTriggerUp -= HandleOnTriggerUp;
+            MLInput.OnControllerButtonDown -= HandleOnButtonDown;
+            MLInput.OnControllerButtonUp -= HandleOnButtonUp;
+        }
+    }
+
+    private void HandleOnButtonDown(byte controllerId, MLInputControllerButton button) {
+        MLInputController controller = _controllerConnectionHandler.ConnectedController;
+        if (controller != null && controller.Id == controllerId &&
+            button == MLInputControllerButton.Bumper) {
+            // Demonstrate haptics using callbacks.
+            controller.StartFeedbackPatternVibe(MLInputControllerFeedbackPatternVibe.ForceDown, MLInputControllerFeedbackIntensity.Medium);
+            // Toggle UseCFUIDTransforms
+            controller.UseCFUIDTransforms = !controller.UseCFUIDTransforms;
+
+            padPressed = true;
+            padDown = true;
+        }
+    }
+
+    private void HandleOnButtonUp(byte controllerId, MLInputControllerButton button) {
+        MLInputController controller = _controllerConnectionHandler.ConnectedController;
+        if (controller != null && controller.Id == controllerId &&
+            button == MLInputControllerButton.Bumper) {
+            // Demonstrate haptics using callbacks.
+            controller.StartFeedbackPatternVibe(MLInputControllerFeedbackPatternVibe.ForceUp, MLInputControllerFeedbackIntensity.Medium);
+
+            padPressed = false;
+            padUp = true;
+        }
+    }
+
+    private void HandleOnTriggerDown(byte controllerId, float value) {
+        MLInputController controller = _controllerConnectionHandler.ConnectedController;
+        if (controller != null && controller.Id == controllerId) {
+            MLInputControllerFeedbackIntensity intensity = (MLInputControllerFeedbackIntensity)((int)(value * 2.0f));
+            controller.StartFeedbackPatternVibe(MLInputControllerFeedbackPatternVibe.Buzz, intensity);
+
+            triggerPressed = true;
+            triggerDown = true;
+            startPos = transform.position;
+        }
+    }
+
+    private void HandleOnTriggerUp(byte controllerId, float value) {
+        MLInputController controller = _controllerConnectionHandler.ConnectedController;
+        if (controller != null && controller.Id == controllerId) {
+            MLInputControllerFeedbackIntensity intensity = (MLInputControllerFeedbackIntensity)((int)(value * 2.0f));
+            controller.StartFeedbackPatternVibe(MLInputControllerFeedbackPatternVibe.Buzz, intensity);
+
+            triggerPressed = false;
+            triggerUp = true;
+            endPos = transform.position;
+        }
+    }
 
 }
