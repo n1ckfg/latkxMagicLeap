@@ -192,7 +192,7 @@ public class MagicLeap_NewController : MonoBehaviour {
             // Demonstrate haptics using callbacks.
             controller.StartFeedbackPatternVibe(MLInputControllerFeedbackPatternVibe.ForceDown, MLInputControllerFeedbackIntensity.Medium);
             // Toggle UseCFUIDTransforms
-            controller.UseCFUIDTransforms = !controller.UseCFUIDTransforms;
+            //controller.UseCFUIDTransforms = !controller.UseCFUIDTransforms;
 
             menuPressed = true;
             menuDown = true;
